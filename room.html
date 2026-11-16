@@ -1,0 +1,7 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Invitation · Réunions Studio</title><link rel="stylesheet" href="/room.css"><script src="/room.js" defer></script></head>
+<body class="guest"><main>
+<h1>Réunions Studio</h1>
+<form id="connect"><label for="name">Votre nom</label><input id="name" required maxlength="32" autocomplete="nickname" placeholder="Votre nom"><label class="consent"><input type="checkbox" id="consent" required> J’accepte que l’hôte puisse enregistrer l’audio de cet appel pour préparer le compte rendu.</label><button class="primary">Rejoindre la salle audio</button></form>
+<section id="session" hidden><h2>Participants</h2><ul id="peers"></ul><p id="recording" class="recording" role="status" hidden></p><div class="controls"><button id="mute" type="button">Couper le micro</button><button id="listen" type="button">Activer l’écoute</button><button id="leave" type="button">Quitter la salle</button></div></section>
+<p id="status" role="status"></p><div id="remote-audio" hidden></div>
+</main></body></html>

@@ -1,25 +1,25 @@
 # Réunions Studio
 
-Assistant de réunion local développé par **Ismail Lahlou**. À partir d’un enregistrement ou d’une transcription Meetily, il prépare un résumé, liste les décisions et extrait les actions avec leurs responsables et leurs échéances.
+Assistant de réunion développé par **Ismail Lahlou**. Il permet d’ouvrir une salle audio avec lien d’invitation ou d’importer un enregistrement. L’application prépare ensuite une transcription horodatée, un résumé, les décisions et les actions.
 
-![Interface de Réunions Studio](docs/interface.png)
+![Atelier Réunions Studio](docs/interface.png)
 
 ## Ce que j’ai développé
 
-- Import audio et transcription locale avec Faster Whisper. Le texte horodaté s’affiche progressivement et reste modifiable.
-- Compte rendu structuré avec un mode rapide par règles et un mode d’IA locale avec Qwen via Ollama.
-- Historique des décisions qui distingue une date proposée, la date finalement validée et les validations contradictoires. Chaque repère ouvre l’extrait audio correspondant, avec arrêt automatique en fin de segment.
-- Import des transcriptions Meetily via SQLite en lecture seule, correction manuelle, validation et export Markdown ou JSON.
+- **Salle audio indépendante.** L’hôte ouvre la page `/salle`, invite les participants par lien HTTPS et enregistre l’appel avec leur accord. **Terminer et analyser** ferme la salle, revient à l’atelier et lance le traitement local.
+- **Transcription locale.** Faster Whisper affiche progressivement les passages horodatés. La transcription est modifiable avant la validation du compte rendu.
+- **Décisions et actions vérifiables.** L’historique suit les dates proposées et validées. Chaque repère audio joue uniquement le passage correspondant. Les actions indiquent les responsables et les échéances disponibles.
+- **Deux modes d’analyse.** Règles locales pour une réponse rapide ou Qwen via Ollama. Import de transcriptions Meetily en lecture seule et export Markdown ou JSON après validation.
 
-Meetily Community sait déjà enregistrer, transcrire et résumer une réunion. Réunions Studio fonctionne à côté de Meetily et se concentre sur le suivi des changements, la vérification par extrait et la validation des actions. Le parcours a été vérifié sur un WAV de démonstration en français. L’import a été testé avec une base compatible de test.
+Le parcours audio a été testé en français. La salle a été vérifiée entre deux sessions Chrome, avec une invitation HTTPS et une analyse déclenchée après la réunion. L’import Meetily a été vérifié sur une base de test compatible.
 
-**Stack** · Python, Faster Whisper, Node.js, JavaScript, SQLite, Ollama et Qwen2.5.
+**Stack** · Python, Faster Whisper, Node.js, JavaScript, WebRTC, SQLite, Ollama et Qwen2.5.
 
 ## Démarrer
 
 1. Sous Windows, extrayez le ZIP. Installez Node.js 20+ et Python 3.11 ou 3.12 si aucun moteur correspondant n’est disponible. Le lanceur détecte aussi les outils livrés avec Codex.
 2. Exécutez `Installer_audio.cmd` une fois pour récupérer Faster Whisper et le modèle multilingue Whisper Base (~145 Mo pour le modèle). L’audio reste local après installation.
-3. Exécutez `Lancer_Studio.cmd` et utilisez `http://127.0.0.1:8465`. Choisissez un fichier MP3, WAV, M4A, WebM, OGG ou FLAC de 100 Mo maximum, ou chargez l’exemple audio synthétique en français.
+3. Exécutez `Lancer_Studio.cmd` et utilisez `http://127.0.0.1:8468`. Choisissez un fichier MP3, WAV, M4A, WebM, OGG ou FLAC de 100 Mo maximum, ou chargez l’exemple audio synthétique en français.
 4. Cliquez sur **Transcrire l’audio**. Corrigez le texte si nécessaire, puis cliquez sur **Analyser la réunion**. Le mode à règles est immédiat. Pour **IA locale · Qwen**, Ollama doit fonctionner et `ollama list` doit contenir `qwen2.5:7b`.
 5. Consultez les décisions, les tâches et leurs preuves. Cliquez sur un repère horaire pour écouter uniquement le passage correspondant. La lecture s’arrête à la fin du segment. Relisez avant de valider et d’exporter.
 
@@ -32,6 +32,14 @@ Pour les sujets reconnus (livraison, démonstration, tests, budget et publicatio
 Le bouton **Importer depuis Meetily** détecte `meeting_minutes.sqlite` dans les dossiers locaux de Meetily. Il affiche les réunions et ouvre les segments choisis, sans copier-coller, via une connexion SQLite en lecture seule. Si nécessaire, indiquez le chemin exact en définissant `MEETILY_DB` avant de lancer `node server.js`. Le raccordement utilise le schéma public de Meetily Community. Pour utiliser le lecteur et les liens audio, ouvrez l’enregistrement d’origine dans Réunions Studio et lancez sa transcription.
 
 Le système utilise un seul moteur audio à la fois. Whisper Base est multilingue. L’exactitude varie selon la langue, la qualité audio et les échanges simultanés. Corrigez le texte avant d’analyser. Les règles d’analyse ciblent les réunions en français.
+
+## Salle audio avec lien d’invitation
+
+Installez [cloudflared](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/downloads/) sur le poste hôte. Fermez `Lancer_Studio.cmd` si ouvert, puis exécutez `Lancer_Salle_En_Ligne.cmd`. Ouvrez la page **Salle en ligne**, créez une salle et partagez le lien HTTPS avec les participants. Le lien est temporaire. Gardez le lanceur ouvert pendant l’appel. La salle accepte jusqu’à six participants.
+
+Les invités autorisent leur micro et acceptent que l’hôte puisse enregistrer. L’hôte clique sur **Démarrer l’enregistrement** quand tout le monde est prêt. À la fin, **Terminer et analyser** ferme la salle, revient à l’atelier et lance la transcription puis l’analyse sur le poste hôte. Le passage de l’audio entre les deux pages utilise le stockage local temporaire du navigateur. L’hôte peut relire, valider et exporter le compte rendu.
+
+Le tunnel sert uniquement la page d’invitation et la signalisation WebRTC. Les fichiers audio, la transcription, Meetily et le compte rendu restent locaux. L’audio de l’appel circule entre les navigateurs via WebRTC. Certains réseaux bloquent les connexions directes. Si nécessaire, configurez un relais TURN avec identifiants à durée limitée via `REUNIONS_TURN_URL`, `REUNIONS_TURN_USER` et `REUNIONS_TURN_PASSWORD`. Une infrastructure HTTPS existante peut aussi servir la passerelle d’invitation sur le port 8467 via `REUNIONS_PUBLIC_URL`.
 
 ## Références
 

@@ -81,6 +81,7 @@
     const lines = [];
     clearClip();
     audioTimings = [];
+    let succeeded = false;
     try {
       let input = file;
       if (!input) {
@@ -125,6 +126,7 @@
             }
             if (event.type === 'done') {
               done = true;
+              succeeded = event.count > 0;
               status('audio-status',event.count ? `Transcription terminée · ${event.count} passage(s). Relisez le texte puis lancez l’analyse.` : 'Aucune parole détectée.',!event.count);
             }
           }
@@ -135,6 +137,7 @@
     } catch (error) {
       status('audio-status',error.message,true);
     } finally { audioBusy = false; controls(); }
+    return succeeded;
   }
   function clearClip() {
     if (clip) clip.abort.abort();
@@ -405,5 +408,23 @@
     ...history.flatMap(row=>[`## Historique · ${row.title}`,...row.events.map(e=>`- ${e.id === row.current ? 'Retenu' : e.type} · ${escape(e.deadline)} · ${escape(evidence(e.id).textContent)}`)])].join('\n\n');
     download('compte-rendu.md','text/markdown;charset=utf-8',markdown);
   };
+  async function resumeMeeting() {
+    const id = new URLSearchParams(location.search).get('reunion');
+    if (!id || !/^[a-f0-9-]{36}$/.test(id)) return;
+    try {
+      const audio = await window.RoomDraft.load(id);
+      if (!(audio instanceof Blob) || !audio.size) throw new Error('Enregistrement de la réunion introuvable.');
+      if (audioBusy || analysisBusy) return;
+      const extension = audio.type.includes('mp4') ? 'm4a' : audio.type.includes('ogg') ? 'ogg' : 'webm';
+      selectAudio(new File([audio],`Reunion-en-ligne.${extension}`,{type:audio.type}));
+      $('transcription').scrollIntoView({block:'start'});
+      if (await streamAudio()) {
+        window.history.replaceState(null,'','/#transcription');
+        await window.RoomDraft.remove(id).catch(()=>{});
+        await analyze();
+      }
+    } catch (error) { status('status',error.message,true); }
+  }
   controls();
+  resumeMeeting();
 })();

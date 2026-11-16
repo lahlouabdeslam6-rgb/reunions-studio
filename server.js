@@ -7,17 +7,22 @@ const { Transform } = require('node:stream');
 const { spawn } = require('node:child_process');
 const readline = require('node:readline');
 const nlp = require('./nlp.js');
+const rooms = require('./rooms.js');
 
 const host = '127.0.0.1';
-const port = Number(process.env.REUNIONS_PORT || 8465);
+const port = Number(process.env.REUNIONS_PORT || 8468);
 const origin = `http://${host}:${port}`;
+const guestPort = Number(process.env.REUNIONS_GUEST_PORT || 8467);
 const model = 'qwen2.5:7b';
 const assets = new Map([
   ['/', ['index.html','text/html']], ['/style.css',['style.css','text/css']],
   ['/nlp.js',['nlp.js','text/javascript']], ['/interface.js',['interface.js','text/javascript']],
   ['/history.js',['history.js','text/javascript']], ['/exemple.wav',['exemple.wav','audio/wav']],
-  ['/meeting-wallpaper.png',['meeting-wallpaper.png','image/png']]
+  ['/meeting-wallpaper.png',['meeting-wallpaper.png','image/png']], ['/room-draft.js',['room-draft.js','text/javascript']]
 ]);
+const guestAssets = new Map([['/room',['room.html','text/html']],['/room.js',['room.js','text/javascript']],
+  ['/room.css',['room.css','text/css']]]);
+const roomAssets = new Map([...guestAssets, ['/salle',['host-room.html','text/html']], ['/host-room',['host-room.html','text/html']]]);
 const maxAudio = 100 * 1024 * 1024;
 function python(args) {
   const bundled = process.env.USERPROFILE && path.join(process.env.USERPROFILE,'.cache','codex-runtimes',
@@ -139,19 +144,25 @@ function json(res,status,value) {
   res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});
   res.end(JSON.stringify(value));
 }
-function createServer() {
+function createServer({guest=false}={}) {
   return http.createServer(async (req,res) => {
-    if (req.headers.host !== `${host}:${port}`) return json(res,403,{error:'Adresse locale requise.'});
+    const tunnel = rooms.externalOrigin();
+    const expected = guest && tunnel && req.headers.host === new URL(tunnel).host ? tunnel : guest ? `http://${host}:${guestPort}` : origin;
+    if (req.headers.host !== new URL(expected).host) return json(res,403,{error:'Adresse indisponible.'});
     let url;
-    try { url = new URL(req.url,origin); } catch { return json(res,400,{error:'Adresse invalide.'}); }
-    const asset = req.method === 'GET' && assets.get(req.url);
+    try { url = new URL(req.url,expected); } catch { return json(res,400,{error:'Adresse invalide.'}); }
+    if (await rooms.handle(req,res,url.pathname,!guest,expected)) return;
+    const asset = req.method === 'GET' && (guest ? guestAssets.get(url.pathname) : roomAssets.get(url.pathname) || assets.get(url.pathname));
     if (asset) {
       const [file,mime] = asset;
       res.writeHead(200,{'Content-Type':mime.startsWith('text/') ? `${mime}; charset=utf-8` : mime,'X-Content-Type-Options':'nosniff',
+        'Cache-Control':['text/html','text/css','text/javascript'].includes(mime) ? 'no-cache' : 'public, max-age=3600',
+        'Referrer-Policy':'no-referrer',
         'Content-Security-Policy':"default-src 'self'; media-src 'self' blob:; frame-ancestors 'none'; base-uri 'none'"});
       fs.createReadStream(path.join(__dirname,file)).on('error',() => res.destroy()).pipe(res);
       return;
     }
+    if (guest) return json(res,404,{error:'Page indisponible.'});
     if (req.headers['sec-fetch-site'] === 'cross-site') return json(res,403,{error:'Requête locale requise.'});
     if (req.method === 'GET' && url.pathname === '/api/meetily') {
       const id = url.searchParams.get('id');
@@ -194,5 +205,21 @@ if (require.main === module) {
       require('node:child_process').spawn('explorer.exe',[origin],{stdio:'ignore'}).on('error',() => {});
     }
   });
+  if (process.env.REUNIONS_PUBLIC_URL) {
+    const gateway = createServer({guest:true});
+    gateway.on('error',error => console.error(`Passerelle des invités : ${error.message}`));
+    gateway.listen(guestPort,host,() => console.log(`Passerelle invités : ${host}:${guestPort}`));
+  }
+  const legacyPort = Number(process.env.REUNIONS_LEGACY_PORT);
+  if (legacyPort && legacyPort !== port && legacyPort !== guestPort) {
+    const legacy = http.createServer((req,res) => {
+      const pathname = req.url.split('?')[0];
+      const destination = ['/host-room','/salle'].includes(pathname) ? '/salle' : '/';
+      res.writeHead(307,{'Location':origin+destination,'Cache-Control':'no-store'});
+      res.end();
+    });
+    legacy.on('error',error=>console.error(`Ancienne adresse : ${error.message}`));
+    legacy.listen(legacyPort,host);
+  }
 }
 module.exports = {analyze,createServer};

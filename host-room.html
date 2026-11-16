@@ -1,0 +1,8 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Salle en ligne · Réunions Studio</title><link rel="stylesheet" href="/room.css"><script src="/room-draft.js" defer></script><script src="/room.js" defer></script></head>
+<body class="host"><main>
+<header class="room-heading"><a id="back-to-studio" href="/">← Atelier de réunion</a><h1>Salle en ligne</h1><p>Invitez des participants et lancez l’analyse à la fin de l’appel.</p></header>
+<form id="connect"><label for="name">Votre nom</label><div class="controls"><input id="name" required maxlength="32" autocomplete="nickname" placeholder="Votre nom"><button class="primary">Créer la salle</button></div></form>
+<section id="session" hidden><h1>Salle audio</h1><div class="invitation"><label for="invite">Lien d’invitation</label><div class="controls"><input id="invite" readonly><button id="copy" type="button">Copier</button></div></div><p id="scope"></p><ul id="peers" aria-label="Participants"></ul><p id="recording" class="recording" role="status" hidden></p>
+<div class="controls"><button id="mute" type="button">Couper le micro</button><button id="listen" type="button">Activer l’écoute</button><button class="primary" id="record" type="button">Démarrer l’enregistrement</button><button class="primary" id="finish" type="button" hidden>Terminer et analyser</button><button id="leave" type="button">Fermer la salle</button></div></section>
+<p id="status" role="status"></p><div id="remote-audio" hidden></div>
+</main></body></html>
