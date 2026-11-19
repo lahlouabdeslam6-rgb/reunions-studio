@@ -4,6 +4,7 @@
   const host = document.body.classList.contains('host');
   const peers = new Map();
   let session, local, mixer, mixOutput, recorder, stoppingCapture, timer;
+  let cameraTrack, ownVideo;
   let generation = 0, chunks = [], recordedBytes = 0;
   let roomParticipants = [];
 
@@ -33,7 +34,29 @@
     peer.source?.disconnect();
     peer.pc.close();
     peer.audio?.remove();
+    peer.tile?.remove();
     peers.delete(id);
+  }
+  function videoTile(track,name,self=false) {
+    const tile = document.createElement('figure');
+    tile.className = self ? 'video-tile self' : 'video-tile';
+    const video = document.createElement('video');
+    video.autoplay = true;
+    video.muted = true;
+    video.playsInline = true;
+    video.srcObject = new MediaStream([track]);
+    const caption = document.createElement('figcaption');
+    caption.textContent = name;
+    tile.append(video,caption);
+    $('videos').append(tile);
+    return tile;
+  }
+  function refreshVideos() {
+    for (const member of roomParticipants) {
+      const peer = peers.get(member.id);
+      if (peer?.tile) peer.tile.hidden = !member.camera;
+    }
+    $('videos').hidden = !$('videos').querySelector('.video-tile:not([hidden])');
   }
   function describePeers() {
     $('peers').replaceChildren(...roomParticipants.map(member => {
@@ -49,13 +72,24 @@
     const peer = {pc,pending:[]};
     peers.set(member.id,peer);
     local.getAudioTracks().forEach(track=>pc.addTrack(track,local));
+    const initiator = session.id < member.id;
+    if (initiator) {
+      peer.videoSender = pc.addTransceiver('video',{direction:'sendrecv'}).sender;
+      if (cameraTrack) await peer.videoSender.replaceTrack(cameraTrack);
+    }
     pc.onicecandidate = e => { if (e.candidate && session) signalPeer(member.id,'candidate',e.candidate.toJSON()).catch(()=>{}); };
     pc.onconnectionstatechange = () => {
       describePeers();
       if (pc.connectionState === 'failed') status('Audio inaccessible pour un participant. Un relais TURN peut être nécessaire.',true);
     };
     pc.ontrack = e => {
-      const stream = e.streams[0] || new MediaStream([e.track]);
+      if (e.track.kind === 'video') {
+        peer.tile?.remove();
+        peer.tile = videoTile(e.track,member.name);
+        refreshVideos();
+        return;
+      }
+      const stream = new MediaStream([e.track]);
       const audio = document.createElement('audio');
       audio.autoplay = true;
       audio.srcObject = stream;
@@ -67,7 +101,7 @@
         peer.source.connect(mixOutput);
       }
     };
-    if (session.id < member.id) {
+    if (initiator) {
       await pc.setLocalDescription(await pc.createOffer());
       await signalPeer(member.id,'offer',pc.localDescription.toJSON());
     }
@@ -84,6 +118,12 @@
     await pc.setRemoteDescription(message.data);
     for (const candidate of pending.splice(0)) await pc.addIceCandidate(candidate);
     if (message.kind === 'offer') {
+      const video = pc.getTransceivers().find(transceiver=>transceiver.receiver.track.kind === 'video');
+      if (video) {
+        video.direction = 'sendrecv';
+        peer.videoSender = video.sender;
+        if (cameraTrack) await peer.videoSender.replaceTrack(cameraTrack);
+      }
       await pc.setLocalDescription(await pc.createAnswer());
       await signalPeer(message.from,'answer',pc.localDescription.toJSON());
     }
@@ -111,7 +151,9 @@
       for (const member of state.peers) await connectPeer(member).catch(error=>status(error.message,true));
       for (const message of state.messages) await handleSignal(message).catch(error=>status(error.message,true));
       describePeers();
+      refreshVideos();
       recordIndicator(state.recording);
+      if (host && state.invite !== session.invite) setInvite(state);
     } catch(error) {
       if (current !== generation) return;
       if (error.status === 403 || error.status === 404) { cleanup(); status('La salle est fermée.'); return; }
@@ -124,14 +166,24 @@
     clearTimeout(timer);
     session = null;
     stopCapture();
+    cameraTrack?.stop();
+    cameraTrack = null;
+    ownVideo?.remove();
+    ownVideo = null;
     for (const id of peers.keys()) removePeer(id);
     local?.getTracks().forEach(t=>t.stop());
     mixer?.close().catch(()=>{});
     local = mixer = recorder = stoppingCapture = null;
     $('session').hidden = true;
+    document.body.classList.remove('in-call');
+    document.querySelector('main').append($('status'));
     $('connect').hidden = false;
     $('connect').querySelector('button').disabled = false;
     $('mute').textContent = 'Couper le micro';
+    $('camera').textContent = 'Activer la caméra';
+    $('camera').setAttribute('aria-pressed','false');
+    $('camera').disabled = false;
+    refreshVideos();
     if (host) { $('leave').hidden = false; $('record').hidden = false; $('record').disabled = false; $('finish').hidden = true; $('finish').disabled = false; }
   }
   async function leave() {
@@ -159,12 +211,11 @@
       }
       const name = $('name').value;
       session = await request(host ? '/api/rooms' : `/api/rooms/${guestCode}/join`,{name,consent:host || $('consent').checked});
-      if (host) {
-        $('invite').value = session.invite;
-        $('scope').textContent = session.online ? 'Partagez ce lien avec les participants. Gardez Réunions Studio ouvert.' : 'Lien de test sur ce PC. Lancez le mode en ligne pour inviter d’autres appareils.';
-      }
+      if (host) setInvite(session);
       $('connect').hidden = true;
       $('session').hidden = false;
+      document.body.classList.add('in-call');
+      $('call-notices').append($('status'));
       status('');
       poll(++generation);
     } catch (error) {
@@ -178,6 +229,40 @@
     track.enabled = !track.enabled;
     $('mute').textContent = track.enabled ? 'Couper le micro' : 'Réactiver le micro';
   };
+  async function updateCamera(track) {
+    await Promise.allSettled(Array.from(peers.values(),peer=>peer.videoSender?.replaceTrack(track)));
+    $('camera').textContent = track ? 'Couper la caméra' : 'Activer la caméra';
+    $('camera').setAttribute('aria-pressed',String(Boolean(track)));
+    refreshVideos();
+    await request(endpoint('camera'),{active:Boolean(track)});
+  }
+  $('camera').onclick = async () => {
+    if (!session) return;
+    const active = session;
+    $('camera').disabled = true;
+    try {
+      if (cameraTrack) {
+        cameraTrack.stop(); cameraTrack = null; ownVideo?.remove(); ownVideo = null;
+        await updateCamera(null);
+      } else {
+        const stream = await navigator.mediaDevices.getUserMedia({video:{width:{ideal:640},height:{ideal:360},frameRate:{ideal:18,max:25}}});
+        const track = stream.getVideoTracks()[0];
+        if (session !== active) { track.stop(); return; }
+        cameraTrack = track;
+        ownVideo = videoTile(track,'Vous',true);
+        track.addEventListener('ended',()=>{ if (cameraTrack === track) $('camera').click(); },{once:true});
+        await updateCamera(track);
+      }
+      status('');
+    } catch (error) { if (session === active) status(error.name === 'NotAllowedError' ? 'Accès à la caméra refusé.' : error.message,true); }
+    finally { $('camera').disabled = false; }
+  };
+  function setInvite(value) {
+    session.invite = value.invite;
+    session.online = value.online;
+    $('invite').value = value.invite;
+    $('scope').textContent = value.online ? 'Partagez le lien actuel avec les participants. Gardez Réunions Studio ouvert.' : 'Lien de test local. Le lien HTTPS s’affiche dès que la passerelle est prête.';
+  }
   $('listen').onclick = () => {
     for (const peer of peers.values()) peer.audio?.play().catch(()=>{});
     status('');

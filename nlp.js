@@ -122,7 +122,41 @@
     }));
   }
 
-  const lib = {example,maxInput,keys,schema,segment,analyzeRules,checkResult};
+  const sentenceSplitter = new Intl.Segmenter('fr',{granularity:'sentence'});
+  const frenchWords = new Set('a alors au aux avec avons bonjour cela ces cette ce cet dans de des donc du elle elles en est et faire faut il ils je la le les leur leurs lundi mais merci mercredi nous on ont ou par pas pour prochain prochaine que qui réunion sa sera ses semaine sont sur tu un une vendredi vous ventes'.split(' '));
+  const englishWords = new Set('about after am an and are as at be been before can could did do does for friday from good hello how i if is it its monday need new next now of on our please ready review sales should team thank that the their them then there these they this those through today tomorrow update was we wednesday were what when will with would you your'.split(' '));
+
+  function passageLanguage(text) {
+    const arabic = (text.match(/\p{Script=Arabic}/gu) || []).length;
+    const latin = (text.match(/\p{Script=Latin}/gu) || []).length;
+    if (arabic > latin) return 'ar';
+    let fr = /[àâçéèêëîïôùûüœ]|\b[cdjlmnst][’']/i.test(text) ? 2 : 0;
+    let en = /\b(?:i|we|you|they)[’'](?:m|re|ve|ll|d)\b|n[’']t\b/i.test(text) ? 2 : 0;
+    for (const word of text.toLowerCase().match(/\p{Script=Latin}+/gu) || []) {
+      if (frenchWords.has(word)) fr++;
+      if (englishWords.has(word)) en++;
+    }
+    if (en > fr && en >= 2) return 'en';
+    if (fr > en && fr >= 2) return 'fr';
+    return null;
+  }
+
+  function translationPassages(text, keepLabels = false) {
+    const passages = [];
+    for (const line of text.match(/[^\n]*\n|[^\n]+$/g) || []) {
+      const prefix = keepLabels ? line.match(/^\s*(?:\[\d{1,2}:\d{2}(?::\d{2})?\][ \t]*)?(?:[\p{L}][\p{L} .’'-]{0,39}:[ \t]+)?/u)[0] : '';
+      if (prefix) passages.push({text:prefix,language:null});
+      for (const {segment} of sentenceSplitter.segment(line.slice(prefix.length))) {
+        const [,before,speech,after] = segment.match(/^(\s*)([\s\S]*?)(\s*)$/);
+        if (before) passages.push({text:before,language:null});
+        if (speech) passages.push({text:speech,language:passageLanguage(speech)});
+        if (after) passages.push({text:after,language:null});
+      }
+    }
+    return passages;
+  }
+
+  const lib = {example,maxInput,keys,schema,segment,analyzeRules,checkResult,translationPassages};
   if (typeof module === 'object' && module.exports) module.exports = lib;
   else root.ReunionNLP = lib;
 })(globalThis);

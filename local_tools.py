@@ -20,9 +20,27 @@ def load_model(allow_download=False):
 
 
 def transcribe(audio, language):
-    model = load_model()
+    import av
+    from faster_whisper.audio import decode_audio
+
+    try:
+        decoded = decode_audio(audio)
+    except TypeError as error:
+        raise ValueError('Décodeur audio incompatible. Relancez Installer_audio.cmd pour réinstaller PyAV.') from error
+    except (av.error.FFmpegError, OSError, IndexError, ValueError) as error:
+        raise ValueError('Le fichier est illisible ou ne contient aucune piste audio. Essayez le WAV de démonstration.') from error
+    if len(decoded) < 4000:
+        raise ValueError('L’enregistrement est trop court pour être transcrit.')
+    try:
+        model = load_model()
+    except (ImportError, OSError, RuntimeError) as error:
+        raise ValueError('Whisper Base est indisponible. Exécutez Installer_audio.cmd puis relancez le Studio.') from error
+    except Exception as error:
+        if type(error).__name__ in ('LocalEntryNotFoundError', 'EntryNotFoundError'):
+            raise ValueError('Modèle Whisper non installé. Exécutez Installer_audio.cmd.') from error
+        raise
     emit('ready')
-    segments, info = model.transcribe(audio, language=None if language == 'auto' else language,
+    segments, info = model.transcribe(decoded, language=None if language == 'auto' else language,
                                      beam_size=3, vad_filter=True, condition_on_previous_text=False)
     count = 0
     for segment in segments:
@@ -30,6 +48,32 @@ def transcribe(audio, language):
             count += 1
             emit('segment', start=round(segment.start, 2), end=round(segment.end, 2), text=segment.text.strip())
     emit('done', count=count, language=info.language)
+
+
+def extract_pdf(filename):
+    from pypdf import PdfReader
+    from pypdf.errors import PdfReadError
+
+    try:
+        reader = PdfReader(filename)
+        if reader.is_encrypted and not reader.decrypt(''):
+            raise ValueError('Ce PDF est protégé par un mot de passe. Importez une copie déverrouillée.')
+        if len(reader.pages) > 100:
+            raise ValueError('Ce PDF dépasse 100 pages. Importez-le par extraits.')
+        pages = []
+        total = 0
+        for page in reader.pages:
+            page_text = '\n'.join(' '.join(line.split()) for line in (page.extract_text() or '').splitlines() if line.strip())
+            if page_text:
+                total += len(page_text) + 2
+                if total > 50000:
+                    raise ValueError('Le texte du PDF dépasse 50 000 caractères. Importez-le par extraits.')
+                pages.append(page_text)
+    except (PdfReadError, OSError) as error:
+        raise ValueError('PDF illisible. Vérifiez que le fichier s’ouvre dans un lecteur PDF.') from error
+    if not pages:
+        raise ValueError('Aucun texte détecté. Pour un PDF scanné, utilisez d’abord un outil OCR.')
+    emit('data', text='\n\n'.join(pages), pages=len(reader.pages))
 
 
 def meetily_path():
@@ -81,18 +125,20 @@ if __name__ == '__main__':
             emit('done', count=0)
         elif command == 'transcribe':
             transcribe(sys.argv[2], sys.argv[3])
+        elif command == 'pdf':
+            extract_pdf(sys.argv[2])
         elif command == 'meetily':
             meetily(sys.argv[2] if len(sys.argv) >= 3 else None)
         else:
             raise ValueError('Commande locale non reconnue.')
     except (ModuleNotFoundError, FileNotFoundError):
-        emit('error', message='Moteur audio absent. Exécutez Installer_audio.cmd.')
+        emit('error', message='Composant local absent. Exécutez Installer_audio.cmd.')
         raise SystemExit(1)
     except sqlite3.Error:
         emit('error', message='Base Meetily inaccessible ou schéma incompatible.')
         raise SystemExit(1)
     except Exception as error:
         print(str(error), file=sys.stderr)
-        message = str(error) if isinstance(error, ValueError) and sys.argv[1] == 'meetily' else 'Conversion audio impossible. Vérifiez le fichier et l’installation du modèle Whisper.'
+        message = str(error) if isinstance(error, ValueError) else ('Lecture PDF impossible.' if sys.argv[1] == 'pdf' else 'Conversion audio impossible. Vérifiez le fichier et l’installation du modèle Whisper.')
         emit('error', message=message)
         raise SystemExit(1)

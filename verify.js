@@ -2,7 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const nlp = require('./nlp');
-const {analyze} = require('./server');
+const {analyze,translatePassages} = require('./server');
 
 test('la démonstration conserve la décision et les champs inconnus', () => {
   const segments = nlp.segment(nlp.example);
@@ -46,4 +46,23 @@ test('le contrat Ollama structure les données et filtre les champs sans preuve'
 });
 test('Ollama indisponible produit un message exploitable',async () => {
   await assert.rejects(analyze(nlp.example,async()=>{throw new Error('connection');}),/Connexion à Ollama impossible/);
+});
+
+test('les phrases anglaises sont repérées sans absorber les noms et horodatages', () => {
+  const source = '[00:07] Nadia : La maquette est prête. The team will review it tomorrow.\n[00:12] Ismail : On valide le budget.';
+  const parts = nlp.translationPassages(source,true);
+  assert.equal(parts.map(part => part.text).join(''),source);
+  assert.deepEqual(parts.filter(part=>part.language === 'en').map(part=>part.text),['The team will review it tomorrow.']);
+  assert.deepEqual(parts.filter(part=>part.language === 'fr').map(part=>part.text),['La maquette est prête.','On valide le budget.']);
+});
+
+test('la traduction arabe est relancée puis rejetée si elle contient encore des caractères chinois', async () => {
+  const bad = 'نتوقع زيادة المبيعات 呈指数级的增长。';
+  const good = 'نتوقع زيادة المبيعات.';
+  const reply = text => ({ok:true,json:async () => ({message:{content:JSON.stringify({translations:[text]})}})});
+  let calls = 0;
+  const result = await translatePassages(['On attend une hausse des ventes.'],'ar',async () => reply(++calls === 1 ? bad : good));
+  assert.deepEqual(result,[good]);
+  assert.equal(calls,2);
+  await assert.rejects(translatePassages(['On attend une hausse des ventes.'],'ar',async () => reply(bad)),/langue inattendue/);
 });

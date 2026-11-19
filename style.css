@@ -56,10 +56,11 @@ body::before {
 .appmark i:nth-child(3),.audio-mark i:nth-child(3) { height: 22px; }
 .sidebar nav { display: grid; gap: 5px; }
 .sidebar a { display: flex; align-items: center; gap: 9px; padding: 7px; text-decoration: none; color: inherit; border: 1px solid transparent; border-radius: 12px; font-size: .91rem; font-weight: 620; }
-.sidebar a:first-child,.sidebar a:hover { background: linear-gradient(#ffffff29,#ffffff12); border-color: #ffffff26; }
+.sidebar a:hover,.sidebar a[aria-current="page"] { background: linear-gradient(#ffffff29,#ffffff12); border-color: #ffffff42; }
 .sidebar a b { display: grid; place-items: center; flex: none; width: 28px; height: 28px; border-radius: 8px; background: linear-gradient(145deg,#f3c68975,#ad6b3970); border: 1px solid #ffffff3d; font-size: 16px; }
 .sidebar a:nth-child(2) b { background: linear-gradient(145deg,#a3c7fd7f,#4857a97a); }
 .sidebar a:nth-child(3) b { background: linear-gradient(145deg,#8ae3c078,#2f7c7470); }
+.sidebar a:nth-child(5) b { background: linear-gradient(145deg,#d2b8ff80,#7753af7a); }
 .side-bottom { border-top: 1px solid #ffffff26; padding-top: 12px; }
 .side-bottom button { width: 100%; text-align: left; font-size: .81rem; }
 .local { font-size: .78rem; padding: 9px 3px 0; }
@@ -91,12 +92,14 @@ main { min-width: 0; }
 .controls { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; margin-top: 12px; }
 .controls label { font-size: .83rem; font-weight: 640; color: var(--muted); }
 button,select,input,textarea { font: inherit; color: inherit; }
-button,select {
+button,select,.button-link {
   background: linear-gradient(165deg,#f2f7ff29,#d7e6ff14 71%,#acc8ff1f);
   border: 1px solid #eef5ff3d; border-radius: 999px; padding: 7px 12px;
   box-shadow: inset 0 1px 0 #ffffff24,0 3px 7px #030b151c;
   font-size: .86rem; font-weight: 640; cursor: pointer;
 }
+.button-link { display: inline-block; color: inherit; text-decoration: none; text-align: center; }
+.button-link:hover { border-color: #f0f7ff85; background: linear-gradient(#eff7ff3d,#bad7ff26); }
 select { max-width: 100%; }
 select option { background: #28364e; color: #fff; }
 button:hover:not(:disabled) { border-color: #f0f7ff85; background: linear-gradient(#eff7ff3d,#bad7ff26); }
@@ -130,6 +133,12 @@ audio { width: 100%; display: block; height: 37px; }
 .metrics strong { display: block; font-size: 1.4rem; line-height: 1.15; }
 .report-section,.history { border-top: 1px solid #e3edff24; padding-top: 10px; margin: 10px 0; }
 .report-section h3,.history h3 { font-size: 1rem; }
+.summary-heading { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; }
+.translation-controls { display:flex; flex-wrap:wrap; gap:6px; }
+.translation-controls button { font-size:.77rem; padding:4px 10px; }
+.translation-controls button[aria-pressed=true] { background:#95bfff37; border-color:#c8e3ff94; }
+.translation { margin:8px 0; padding:9px 12px; border:1px solid #e4eeff39; border-radius:12px; background:#b5d0ff18; white-space:pre-wrap; overflow-wrap:anywhere; }
+#transcript-translation { max-height:20rem; overflow:auto; }
 .row,.timeline { margin-top: 7px; }
 .row-fields { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 7px; }
 .row label { display: block; font-size: .79rem; font-weight: 650; }
@@ -141,6 +150,36 @@ audio { width: 100%; display: block; height: 37px; }
 .tag { font-size: .73rem; padding: 2px 7px; border-radius: 999px; border: 1px solid #edf5ff24; background: #e3efff20; font-weight: 670; margin-right: 5px; }
 .tag.current { background: #76cba930; color: #c2f9db; }
 .tag.conflict { background: #e9a5852d; color: #ffd0bc; }
+.meeting-toolbar { display: flex; flex-wrap: wrap; align-items: end; gap: 8px 12px; padding: 14px 20px; }
+.meeting-toolbar label { flex: 1 1 12rem; font-size: .82rem; font-weight: 640; }
+.meeting-toolbar input { display: block; margin-top: 4px; }
+.meeting-toolbar .button-link { margin-bottom: 4px; }
+.meeting-toolbar .status { flex: 0 0 100%; margin: 0 !important; }
+.meeting-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 9px; }
+.meeting-item {
+  display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: start;
+  border: 1px solid #e5efff30; border-radius: 16px;
+  background: linear-gradient(145deg,#eff6ff23,#d9e9ff10 82%);
+}
+.meeting-item:hover { border-color: #c4e1ff90; background: linear-gradient(145deg,#d6e7ff40,#97b8f423); }
+.meeting-card {
+  display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: baseline; gap: 5px 12px;
+  padding: 12px 14px; border-radius: 16px;
+  color: inherit; text-decoration: none; overflow-wrap: anywhere;
+}
+.meeting-card:hover strong { text-decoration: underline; text-underline-offset: 3px; }
+.meeting-card time,.meeting-preview { color: var(--muted); font-size: .83rem; }
+.meeting-card-meta,.meeting-preview { grid-column: 1 / -1; }
+.meeting-card-meta { display: flex; flex-wrap: wrap; gap: 4px 6px; }
+.meeting-card-meta .tag { margin: 0; }
+.danger { color: #ffe0df; background: linear-gradient(150deg,#ffc5d32d,#ae4a6345); border-color: #ffc5d350; }
+.danger:hover:not(:disabled) { background: linear-gradient(150deg,#ffc5d34d,#ae4a6375); border-color: #ffc5d394; }
+.remove-meeting { margin: 10px 10px 10px 0; padding: 5px 10px; font-size: .77rem; }
+.delete-dialog { color: inherit; width: min(420px,calc(100% - 28px)); padding: 22px; background-color: #192437f2; }
+.delete-dialog::backdrop { background: #060c18a8; backdrop-filter: blur(4px); }
+.delete-dialog h2 { margin: 0 0 8px; font-size: 1.2rem; }
+.delete-dialog p { margin: 0; overflow-wrap: anywhere; }
+.delete-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 
 @media(max-width: 970px) {
@@ -161,6 +200,7 @@ audio { width: 100%; display: block; height: 37px; }
   .row-fields { grid-template-columns: 1fr; }
   .metrics { gap: 4px; }
   .metrics div { padding: 6px 4px; }
+  .meeting-card { grid-template-columns: 1fr; }
 }
 @media(prefers-reduced-motion: reduce) {
   :root { scroll-behavior: auto; }

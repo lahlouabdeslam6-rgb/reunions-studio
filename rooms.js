@@ -29,7 +29,7 @@ function prune() {
   }
 }
 function participant(room,name) {
-  const peer = {id:id(8),secret:id(24),name:String(name || 'Participant').trim().slice(0,32) || 'Participant',seen:Date.now(),messages:[]};
+  const peer = {id:id(8),secret:id(24),name:String(name || 'Participant').trim().slice(0,32) || 'Participant',seen:Date.now(),messages:[],camera:false};
   room.peers.set(peer.id,peer);
   return peer;
 }
@@ -66,7 +66,7 @@ async function handle(req,res,path,local,origin) {
       send(res,201,{...joinResponse(room,host),invite:`${publicUrl || origin}/room?code=${room.code}`,online:!!publicUrl});
       return true;
     }
-    const match = /^\/api\/rooms\/([a-zA-Z0-9_-]{22})\/(join|poll|signal|record|leave)$/.exec(path);
+    const match = /^\/api\/rooms\/([a-zA-Z0-9_-]{22})\/(join|poll|signal|record|camera|leave)$/.exec(path);
     const room = match && rooms.get(match[1]);
     if (!room) { send(res,404,{error:'Salle introuvable ou fermée.'}); return true; }
     const op = match[2];
@@ -80,8 +80,9 @@ async function handle(req,res,path,local,origin) {
     if (!peer || peer.secret !== req.headers['x-room-token']) { send(res,403,{error:'Session expirée.'}); return true; }
     peer.seen = Date.now();
     if (op === 'poll' && req.method === 'GET') {
-      send(res,200,{peers:Array.from(room.peers.values(),p=>({id:p.id,name:p.name,host:p.id === room.host})),
-        messages:peer.messages.splice(0),recording:room.recording}); return true;
+      send(res,200,{peers:Array.from(room.peers.values(),p=>({id:p.id,name:p.name,host:p.id === room.host,camera:p.camera})),
+        messages:peer.messages.splice(0),recording:room.recording,
+        ...(local && peer.id === room.host ? {invite:`${externalOrigin() || origin}/room?code=${room.code}`,online:!!externalOrigin()} : {})}); return true;
     }
     if (req.method !== 'POST') { send(res,405,{error:'Action indisponible.'}); return true; }
     const input = await body(req);
@@ -94,6 +95,8 @@ async function handle(req,res,path,local,origin) {
       target.messages.push({from:peer.id,kind:input.kind,data:input.data});
     } else if (op === 'record' && peer.id === room.host) {
       room.recording = input.active === true;
+    } else if (op === 'camera') {
+      peer.camera = input.active === true;
     } else if (op === 'leave') {
       room.peers.delete(peer.id);
       if (peer.id === room.host) rooms.delete(room.code);
